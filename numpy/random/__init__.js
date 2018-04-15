@@ -1,25 +1,4 @@
 /* eslint-disable camelcase, no-eq-null, comma-dangle, no-underscore-dangle, strict, new-cap, no-var, vars-on-top, no-param-reassign, func-names */
-/**
- * This may be removed after the PR #518 has been merged
- */
-Sk.misceval.tryCatch = Sk.misceval.tryCatch || function(tryFn, catchFn) {
-    var r;
-
-    try {
-        r = tryFn();
-    } catch(e) {
-        return catchFn(e);
-    }
-
-    if (r instanceof Sk.misceval.Suspension) {
-        var susp = new Sk.misceval.Suspension(undefined, r);
-        susp.resume = function() { return Sk.misceval.tryCatch(r.resume, catchFn); };
-        return susp;
-    } else {
-        return r;
-    }
-};
-
 /* ****************************************************************************/
 /*                                  RandomKit                                 */
 /*                                                                            */
@@ -645,486 +624,486 @@ var rk_state = {
     gauss: null,
 };
 
-// imports
-var np = Sk.importModule('numpy');
-
-/**
- *  Class Name Identifier for RandomState
- */
-var CLASS_RANDOMSTATE = 'RandomState';
-
-function cont0_array(state, func, size, lock) {
-    // not implemented
-    var array_data;
-    var array;
-    var length;
-    var i;
-
-    // we just return a single value!
-    if (Sk.builtin.checkNone(size)) {
-        return new Sk.builtin.float_(func.call(null, state));
-    }
-
-    array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.float_);
-    length = array.v.buffer.length;
-
-    array_data = array.v.buffer; // data view on the ndarray
-
-    for (i = 0; i < length; i++) {
-        array_data[i] = new Sk.builtin.float_(func.call(null, state));
-    }
-
-    return array;
-}
-
-function cont1_array_sc(state, func, size, a, lock) {
-    // not implemented
-}
-
-// TODO:
-function discnp_array_sc(state, func, size, n, p, lock) {
-    var array_data = [];
-    var array;
-    var length;
-    var i;
-    var jsn = Sk.ffi.remapToJs(n);
-    var jsp = Sk.ffi.remapToJs(p);
-
-    if (Sk.builtin.checkNone(size)) {
-        return new Sk.builtin.int_(func(state, jsn, jsp));
-    } else {
-        array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
-        length = Sk.builtin.len(array).v;
-        array_data = array.v.buffer;
-
-        for (i = 0; i < length; i++) {
-            array_data[i] = new Sk.builtin.int_(func(state, jsn, jsp));
-        }
-
-        return array;
-    }
-}
-
-// https://github.com/numpy/numpy/blob/master/numpy/random/mtrand/mtrand.pyx#L356
-function discnp_array(state, func, size, on, op, lock) {
-    var array_data = [];
-    var array;
-    var length;
-    var i;
-    var op_data;
-    var on_data;
-    var multi; // broadcast
-    var on1;
-    var op1;
-
-    if (Sk.builtin.checkNone(size)) {
-        multi = null; // ToDo: MultiIter is not supported
-        var py_shape = new Sk.builtin.tuple(on.v.shape.map(
-            function(x) {
-                return new Sk.builtin.int_(x);
-            }));
-
-        array = Sk.misceval.callsim(np.$d.empty, py_shape, Sk.builtin.int_);
-        array_data = array.v.buffer; // ToDo: use PyArray_DATA
-
-        // broadcast arrays
-        on1 = on.v.buffer;
-        op1 = op.v.buffer;
-
-        if (op1.length !== on1.length) {
-            if (op1.length === 1) {
-                for (i = 1; i < on1.length; i++) {
-                    op1.push(op1[0]);
-                }
-            } else if (on1.length === 1) {
-                for (i = 1; i < op1.length; i++) {
-                    on1.push(on1[0]);
-                }                
-            } else {
-                throw new Sk.builtin.ValueError("cannot broadcast n and p to a common shape");
-            }
-        }
-
-        for (i = 0; i < array_data.length; i++) {
-            on_data = Sk.ffi.remapToJs(on1[i]);
-            op_data = Sk.ffi.remapToJs(op1[i]);
-            array_data[i] = new Sk.builtin.int_(func(state, on_data, op_data));
-        }
-    } else {
-        array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
-        array_data = array.v.buffer; // PyArray_DATA() TODO
-        // multi = PyArray_MultiIterNew(3, array, on, op);
-        on1 = on.v.buffer;
-        op1 = op.v.buffer;
-
-        // ToDo: use PyArray_SIZE
-        if (array_data.length !== on1.length && array_data.length !== op1.length) {
-            throw new Sk.builtin.ValueError("size is not compatible with inputs");
-        }
-        // this loop assumes the same shape and array order
-        for (i = 0; i < array_data.length; i++) {
-            on_data = Sk.ffi.remapToJs(on1[i]);
-            op_data = Sk.ffi.remapToJs(op1[i]);
-            array_data[i] = new Sk.builtin.int_(func(state, on_data, op_data));
-        }
-    }
-
-    return array;
-}
-
-function PyArray_FROM_OTF(m, type, flags) {
-    // ToDo: pass in the flags if available
-    return Sk.misceval.callsim(np.$d.array, m, type);
-}
-
 /**
  *  This is the actual module nump.random
  */
 var $builtinmodule = function(name) {
     var mod = {};
 
-    var randomState_c = function($gbl, $loc) {
-        var js__init__ = function(self, seed) {
-            if (seed == null) {
-                seed = Sk.builtin.none.none$;
-            }
+    // imports
+    return Sk.misceval.chain(Sk.importModule('numpy', false, true), function (np) {
+        /**
+         *  Class Name Identifier for RandomState
+         */
+        var CLASS_RANDOMSTATE = 'RandomState';
 
-            self.internal_state = createRkState();
-
-            // poisson_lam_max = np.iinfo('l').max - np.sqrt(np.iinfo('l').max)*10
-            self.poisson_lam_max = new Sk.builtin.int_(Math.pow(2, 53) - 1);
-
-            self.lock = null; // Todo self.lock = Lock()
-            Sk.misceval.callsim(self.seed, self, seed); // self.seed(seed);
-        };
-        js__init__.co_varnames = ['self', 'seed'];
-        js__init__.$defaults = [Sk.builtin.none.none$];
-        $loc.__init__ = new Sk.builtin.func(js__init__);
-        /*
-            seed(seed=None)
-            Seed the generator.
-            This method is called when `RandomState` is initialized. It can be
-            called again to re-seed the generator. For details, see `RandomState`.
-            Parameters
-            ----------
-            seed : int or array_like, optional
-                Seed for `RandomState`.
-                Must be convertible to 32 bit unsigned integers.
-            See Also
-            --------
-            RandomState
-        */
-        $loc.seed = new Sk.builtin.func(function(self, seed) {
-            if (seed == null) {
-                seed = Sk.builtin.none.none$;
-            }
-
-            var errcode; // rk_error
-            var obj; // ndarray
-
-            try {
-                if (Sk.builtin.checkNone(seed)) {
-                    // with self.lock
-                    errcode = rk_randomseed(self.internal_state);
-                } else {
-                    var idx = new Sk.builtin.int_(Sk.misceval.asIndex(seed)); // ToDo: operator.index(seed)
-                    var js_idx = Sk.ffi.remapToJs(idx);
-
-                    if (js_idx > Math.pow(2, 32) - 1 || js_idx < 0) {
-                        throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
-                    }
-
-                    // with self.lock
-                    rk_seed(js_idx, self.internal_state);
-                }
-            } catch(e) {
-                if (e instanceof Sk.builtin.TypeError) {
-                    // ToDo: pass in dtype to asarray
-                    obj = Sk.misceval.callsim(np.$d.asarray, seed, Sk.builtin.int_);
-
-                    /*
-                    if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
-                        throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
-                    }
-                    */
-
-                    // check for each item in array
-                    obj.v.buffer.map(function(elem) {
-                        if (elem > Math.pow(2, 32) - 1 || elem < 0) {
-                            throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
-                        }
-                    });
-
-                    // our numpy module does not support astype
-                    // obj = obj.astype('L', casting='unsafe')
-                    // with self.lock:
-
-                    // init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj), PyArray_DIM(obj, 0))
-                    // last parameter is the key_length of first dim!
-                    init_by_array(self.internal_state, obj.v.buffer, obj.v.shape[0]);
-                } else {
-                    throw e;
-                }
-            }
-        });
-
-        $loc.set_state = new Sk.builtin.func(function(self) {
-
-        });
-
-        $loc.get_state = new Sk.builtin.func(function(self) {
-            // save current state as ndarray
-            // remap internal_state.key to Python objects and then call
-            var js_key = self.internal_state.key.map(function(elem) {
-                return new Sk.builtin.int_(elem);
-            });
-
-            var state = obj = Sk.misceval.callsim(np.$d.asarray, new Sk.builtin.tuple(js_key), Sk.builtin.int_);
-
-            var has_gauss = new Sk.builtin.int_(self.internal_state.has_gauss);
-            var gauss  = new Sk.builtin.float_(self.internal_state.gauss );
-            var pos  = new Sk.builtin.int_(self.internal_state.pos);
-
-            return new Sk.builtin.tuple([new Sk.builtin.str('MT19937'), state, pos, has_gauss, gauss]);
-        });
-
-        /*
-        random_sample(size=None)
-        Return random floats in the half-open interval [0.0, 1.0).
-        Results are from the "continuous uniform" distribution over the
-        stated interval.  To sample :math:`Unif[a, b), b > a` multiply
-        the output of `random_sample` by `(b-a)` and add `a`::
-          (b - a) * random_sample() + a
-        Parameters
-        ----------
-        size : int or tuple of ints, optional
-            Output shape.  If the given shape is, e.g., ``(m, n, k)``, then
-            ``m * n * k`` samples are drawn.  Default is None, in which case a
-            single value is returned.
-        Returns
-        -------
-        out : float or ndarray of floats
-            Array of random floats of shape `size` (unless ``size=None``, in which
-            case a single float is returned).
-        Examples
-        --------
-        >>> np.random.random_sample()
-        0.47108547995356098
-        >>> type(np.random.random_sample())
-        <type 'float'>
-        >>> np.random.random_sample((5,))
-        array([ 0.30220482,  0.86820401,  0.1654503 ,  0.11659149,  0.54323428])
-        Three-by-two array of random numbers from [-5, 0):
-        >>> 5 * np.random.random_sample((3, 2)) - 5
-        array([[-3.99149989, -0.52338984],
-               [-2.99091858, -0.79479508],
-               [-1.23204345, -1.75224494]])
-        */
-        var js_random_sample = function(self, size) {
-            // get *args
-            if (size == null) {
-                size = Sk.builtin.none.none$;
-            }
-
-            var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
-
-            return py_res;
-        };
-        js_random_sample.co_varnames = ['self', 'size'];
-        js_random_sample.$defaults = [Sk.builtin.none.none$];
-        $loc.random_sample = new Sk.builtin.func(js_random_sample);
-
-        var js_tomaxint = function(self, size) {
-            throw new NotImplementedError('RandomState.tomaxint');
-            // return disc0_array(self.internal_state, rk_long, size, self.lock)
-        };
-        js_tomaxint.co_varnames = ['self', 'size'];
-        js_tomaxint.$defaults = [Sk.builtin.none.none$];
-        $loc.tomaxint = new Sk.builtin.func(js_tomaxint);
-
-        /*
-        randint(low, high=None, size=None)
-        Return random integers from `low` (inclusive) to `high` (exclusive).
-        Return random integers from the "discrete uniform" distribution in the
-        "half-open" interval [`low`, `high`). If `high` is None (the default),
-        then results are from [0, `low`).
-        */
-        var js_randint = function(self, low, high, size) {
-            Sk.builtin.pyCheckArgs("randint", arguments, 1, 3, true);
-            if (size == null) {
-                size = Sk.builtin.none.none$;
-            }
-
-            var lo;
-            var hi;
-            var rv;
-            var diff;
-            var array_data = [];
+        function cont0_array(state, func, size, lock) {
+            // not implemented
+            var array_data;
             var array;
             var length;
             var i;
 
-            if (high == null || Sk.builtin.checkNone(high)) {
-                lo = new Sk.builtin.int_(0);
-                hi = new Sk.builtin.int_(low);
-            } else {
-                lo = new Sk.builtin.int_(low);
-                hi = new Sk.builtin.int_(high);
+            // we just return a single value!
+            if (Sk.builtin.checkNone(size)) {
+                return new Sk.builtin.float_(func.call(null, state));
             }
 
-            lo = Sk.ffi.remapToJs(lo);
-            hi = Sk.ffi.remapToJs(hi);
+            array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.float_);
+            length = array.v.buffer.length;
 
-            if (lo >= hi) {
-                throw new Sk.builtin.ValueError("low >= high");
+            array_data = array.v.buffer; // data view on the ndarray
+
+            for (i = 0; i < length; i++) {
+                array_data[i] = new Sk.builtin.float_(func.call(null, state));
             }
 
-            diff = Math.abs(hi - lo - 1);
+            return array;
+        }
+
+        function cont1_array_sc(state, func, size, a, lock) {
+            // not implemented
+        }
+
+        // TODO:
+        function discnp_array_sc(state, func, size, n, p, lock) {
+            var array_data = [];
+            var array;
+            var length;
+            var i;
+            var jsn = Sk.ffi.remapToJs(n);
+            var jsp = Sk.ffi.remapToJs(p);
 
             if (Sk.builtin.checkNone(size)) {
-                rv = new Sk.builtin.int_(lo + rk_interval(diff, self.internal_state));
-                return rv;
+                return new Sk.builtin.int_(func(state, jsn, jsp));
             } else {
                 array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
-                length = Sk.builtin.len(array).v; // get size
+                length = Sk.builtin.len(array).v;
                 array_data = array.v.buffer;
 
                 for (i = 0; i < length; i++) {
-                    rv = lo + rk_interval(diff, self.internal_state);
-                    // ToDo: do we need some casting here?
-                    array_data[i] = new Sk.builtin.int_(rv);
+                    array_data[i] = new Sk.builtin.int_(func(state, jsn, jsp));
                 }
 
                 return array;
             }
-        };
-        js_randint.co_varnames = ['self', 'low', 'high', 'size'];
-        js_randint.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
-        $loc.randint = new Sk.builtin.func(js_randint);
+        }
 
-        var js_random_integers = function(self, low, high, size) {
-            if (high == null || Sk.builtin.checkNone(high)) {
-                high = low;
-                low = new Sk.builtin.int_(1);
+        // https://github.com/numpy/numpy/blob/master/numpy/random/mtrand/mtrand.pyx#L356
+        function discnp_array(state, func, size, on, op, lock) {
+            var array_data = [];
+            var array;
+            var length;
+            var i;
+            var op_data;
+            var on_data;
+            var multi; // broadcast
+            var on1;
+            var op1;
+
+            if (Sk.builtin.checkNone(size)) {
+                multi = null; // ToDo: MultiIter is not supported
+                var py_shape = new Sk.builtin.tuple(on.v.shape.map(
+                    function(x) {
+                        return new Sk.builtin.int_(x);
+                    }));
+
+                array = Sk.misceval.callsim(np.$d.empty, py_shape, Sk.builtin.int_);
+                array_data = array.v.buffer; // ToDo: use PyArray_DATA
+
+                // broadcast arrays
+                on1 = on.v.buffer;
+                op1 = op.v.buffer;
+
+                if (op1.length !== on1.length) {
+                    if (op1.length === 1) {
+                        for (i = 1; i < on1.length; i++) {
+                            op1.push(op1[0]);
+                        }
+                    } else if (on1.length === 1) {
+                        for (i = 1; i < op1.length; i++) {
+                            on1.push(on1[0]);
+                        }
+                    } else {
+                        throw new Sk.builtin.ValueError("cannot broadcast n and p to a common shape");
+                    }
+                }
+
+                for (i = 0; i < array_data.length; i++) {
+                    on_data = Sk.ffi.remapToJs(on1[i]);
+                    op_data = Sk.ffi.remapToJs(op1[i]);
+                    array_data[i] = new Sk.builtin.int_(func(state, on_data, op_data));
+                }
+            } else {
+                array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
+                array_data = array.v.buffer; // PyArray_DATA() TODO
+                // multi = PyArray_MultiIterNew(3, array, on, op);
+                on1 = on.v.buffer;
+                op1 = op.v.buffer;
+
+                // ToDo: use PyArray_SIZE
+                if (array_data.length !== on1.length && array_data.length !== op1.length) {
+                    throw new Sk.builtin.ValueError("size is not compatible with inputs");
+                }
+                // this loop assumes the same shape and array order
+                for (i = 0; i < array_data.length; i++) {
+                    on_data = Sk.ffi.remapToJs(on1[i]);
+                    op_data = Sk.ffi.remapToJs(op1[i]);
+                    array_data[i] = new Sk.builtin.int_(func(state, on_data, op_data));
+                }
             }
 
-            return Sk.misceval.callsim(self.randint, self, low, sum = Sk.abstr.numberBinOp(high, new Sk.builtin.int_(1), 'Add'), size);
-        };
-        js_random_integers.co_varnames = ['self', 'low', 'high', 'size'];
-        js_random_integers.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
-        $loc.random_integers = new Sk.builtin.func(js_random_integers);
+            return array;
+        }
 
-        $loc.rand = new Sk.builtin.func(function(self) {
-            // get *args
-            args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
-            if (args.v.length === 0) {
-                return Sk.misceval.callsim(self.random_sample, self);
-            }
+        function PyArray_FROM_OTF(m, type, flags) {
+            // ToDo: pass in the flags if available
+            return Sk.misceval.callsim(np.$d.array, m, type);
+        }
 
-            return Sk.misceval.callsim(self.random_sample, self, args);
-        });
+        var randomState_c = function($gbl, $loc) {
+            var js__init__ = function(self, seed) {
+                if (seed == null) {
+                    seed = Sk.builtin.none.none$;
+                }
 
-        // binomial: mtrand.pyx:L3587
-        var js_binomial = function(self, n, p, size) {
-            Sk.builtin.pyCheckArgs("binomial", arguments, 2, 3, true);
-            var on; // ndarray
-            var op; // ndarray
-            var ln; // long
-            var fp; // double
+                self.internal_state = createRkState();
 
-            if (size == null) {
-                size = Sk.builtin.none.none$;
-            }
-            debugger;
-            var ex = null;
-            try {
-                fp = Sk.ffi.remapToJs(new Sk.builtin.float_(p));
-                ln = Sk.ffi.remapToJs(new Sk.builtin.int_(n));
-            } catch(e) {
-                ex = e;
-            }
+                // poisson_lam_max = np.iinfo('l').max - np.sqrt(np.iinfo('l').max)*10
+                self.poisson_lam_max = new Sk.builtin.int_(Math.pow(2, 53) - 1);
 
-            // check if the conversion was successful
-            if (ex === null) {
-                if (ln < 0) {
+                self.lock = null; // Todo self.lock = Lock()
+                Sk.misceval.callsim(self.seed, self, seed); // self.seed(seed);
+            };
+            js__init__.co_varnames = ['self', 'seed'];
+            js__init__.$defaults = [Sk.builtin.none.none$];
+            $loc.__init__ = new Sk.builtin.func(js__init__);
+            /*
+                seed(seed=None)
+                Seed the generator.
+                This method is called when `RandomState` is initialized. It can be
+                called again to re-seed the generator. For details, see `RandomState`.
+                Parameters
+                ----------
+                seed : int or array_like, optional
+                    Seed for `RandomState`.
+                    Must be convertible to 32 bit unsigned integers.
+                See Also
+                --------
+                RandomState
+            */
+            $loc.seed = new Sk.builtin.func(function(self, seed) {
+                if (seed == null) {
+                    seed = Sk.builtin.none.none$;
+                }
+
+                var errcode; // rk_error
+                var obj; // ndarray
+
+                try {
+                    if (Sk.builtin.checkNone(seed)) {
+                        // with self.lock
+                        errcode = rk_randomseed(self.internal_state);
+                    } else {
+                        var idx = new Sk.builtin.int_(Sk.misceval.asIndex(seed)); // ToDo: operator.index(seed)
+                        var js_idx = Sk.ffi.remapToJs(idx);
+
+                        if (js_idx > Math.pow(2, 32) - 1 || js_idx < 0) {
+                            throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
+                        }
+
+                        // with self.lock
+                        rk_seed(js_idx, self.internal_state);
+                    }
+                } catch(e) {
+                    if (e instanceof Sk.builtin.TypeError) {
+                        // ToDo: pass in dtype to asarray
+                        obj = Sk.misceval.callsim(np.$d.asarray, seed, Sk.builtin.int_);
+
+                        /*
+                        if ((obj > Math.pow(2, 32) - 1) | (obj < 0).any()) {
+                            throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
+                        }
+                        */
+
+                        // check for each item in array
+                        obj.v.buffer.map(function(elem) {
+                            if (elem > Math.pow(2, 32) - 1 || elem < 0) {
+                                throw new Sk.builtin.ValueError('Seed must be between 0 and 4294967295');
+                            }
+                        });
+
+                        // our numpy module does not support astype
+                        // obj = obj.astype('L', casting='unsafe')
+                        // with self.lock:
+
+                        // init_by_array(self.internal_state, <unsigned long *>PyArray_DATA(obj), PyArray_DIM(obj, 0))
+                        // last parameter is the key_length of first dim!
+                        init_by_array(self.internal_state, obj.v.buffer, obj.v.shape[0]);
+                    } else {
+                        throw e;
+                    }
+                }
+            });
+
+            $loc.set_state = new Sk.builtin.func(function(self) {
+
+            });
+
+            $loc.get_state = new Sk.builtin.func(function(self) {
+                // save current state as ndarray
+                // remap internal_state.key to Python objects and then call
+                var js_key = self.internal_state.key.map(function(elem) {
+                    return new Sk.builtin.int_(elem);
+                });
+
+                var state = obj = Sk.misceval.callsim(np.$d.asarray, new Sk.builtin.tuple(js_key), Sk.builtin.int_);
+
+                var has_gauss = new Sk.builtin.int_(self.internal_state.has_gauss);
+                var gauss  = new Sk.builtin.float_(self.internal_state.gauss );
+                var pos  = new Sk.builtin.int_(self.internal_state.pos);
+
+                return new Sk.builtin.tuple([new Sk.builtin.str('MT19937'), state, pos, has_gauss, gauss]);
+            });
+
+            /*
+            random_sample(size=None)
+            Return random floats in the half-open interval [0.0, 1.0).
+            Results are from the "continuous uniform" distribution over the
+            stated interval.  To sample :math:`Unif[a, b), b > a` multiply
+            the output of `random_sample` by `(b-a)` and add `a`::
+            (b - a) * random_sample() + a
+            Parameters
+            ----------
+            size : int or tuple of ints, optional
+                Output shape.  If the given shape is, e.g., ``(m, n, k)``, then
+                ``m * n * k`` samples are drawn.  Default is None, in which case a
+                single value is returned.
+            Returns
+            -------
+            out : float or ndarray of floats
+                Array of random floats of shape `size` (unless ``size=None``, in which
+                case a single float is returned).
+            Examples
+            --------
+            >>> np.random.random_sample()
+            0.47108547995356098
+            >>> type(np.random.random_sample())
+            <type 'float'>
+            >>> np.random.random_sample((5,))
+            array([ 0.30220482,  0.86820401,  0.1654503 ,  0.11659149,  0.54323428])
+            Three-by-two array of random numbers from [-5, 0):
+            >>> 5 * np.random.random_sample((3, 2)) - 5
+            array([[-3.99149989, -0.52338984],
+                [-2.99091858, -0.79479508],
+                [-1.23204345, -1.75224494]])
+            */
+            var js_random_sample = function(self, size) {
+                // get *args
+                if (size == null) {
+                    size = Sk.builtin.none.none$;
+                }
+
+                var py_res = cont0_array(self.internal_state, rk_double, size, self.lock);
+
+                return py_res;
+            };
+            js_random_sample.co_varnames = ['self', 'size'];
+            js_random_sample.$defaults = [Sk.builtin.none.none$];
+            $loc.random_sample = new Sk.builtin.func(js_random_sample);
+
+            var js_tomaxint = function(self, size) {
+                throw new NotImplementedError('RandomState.tomaxint');
+                // return disc0_array(self.internal_state, rk_long, size, self.lock)
+            };
+            js_tomaxint.co_varnames = ['self', 'size'];
+            js_tomaxint.$defaults = [Sk.builtin.none.none$];
+            $loc.tomaxint = new Sk.builtin.func(js_tomaxint);
+
+            /*
+            randint(low, high=None, size=None)
+            Return random integers from `low` (inclusive) to `high` (exclusive).
+            Return random integers from the "discrete uniform" distribution in the
+            "half-open" interval [`low`, `high`). If `high` is None (the default),
+            then results are from [0, `low`).
+            */
+            var js_randint = function(self, low, high, size) {
+                Sk.builtin.pyCheckArgs("randint", arguments, 1, 3, true);
+                if (size == null) {
+                    size = Sk.builtin.none.none$;
+                }
+
+                var lo;
+                var hi;
+                var rv;
+                var diff;
+                var array_data = [];
+                var array;
+                var length;
+                var i;
+
+                if (high == null || Sk.builtin.checkNone(high)) {
+                    lo = new Sk.builtin.int_(0);
+                    hi = new Sk.builtin.int_(low);
+                } else {
+                    lo = new Sk.builtin.int_(low);
+                    hi = new Sk.builtin.int_(high);
+                }
+
+                lo = Sk.ffi.remapToJs(lo);
+                hi = Sk.ffi.remapToJs(hi);
+
+                if (lo >= hi) {
+                    throw new Sk.builtin.ValueError("low >= high");
+                }
+
+                diff = Math.abs(hi - lo - 1);
+
+                if (Sk.builtin.checkNone(size)) {
+                    rv = new Sk.builtin.int_(lo + rk_interval(diff, self.internal_state));
+                    return rv;
+                } else {
+                    array = Sk.misceval.callsim(np.$d.empty, size, Sk.builtin.int_);
+                    length = Sk.builtin.len(array).v; // get size
+                    array_data = array.v.buffer;
+
+                    for (i = 0; i < length; i++) {
+                        rv = lo + rk_interval(diff, self.internal_state);
+                        // ToDo: do we need some casting here?
+                        array_data[i] = new Sk.builtin.int_(rv);
+                    }
+
+                    return array;
+                }
+            };
+            js_randint.co_varnames = ['self', 'low', 'high', 'size'];
+            js_randint.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
+            $loc.randint = new Sk.builtin.func(js_randint);
+
+            var js_random_integers = function(self, low, high, size) {
+                if (high == null || Sk.builtin.checkNone(high)) {
+                    high = low;
+                    low = new Sk.builtin.int_(1);
+                }
+
+                return Sk.misceval.callsim(self.randint, self, low, sum = Sk.abstr.numberBinOp(high, new Sk.builtin.int_(1), 'Add'), size);
+            };
+            js_random_integers.co_varnames = ['self', 'low', 'high', 'size'];
+            js_random_integers.$defaults = [Sk.builtin.none.none$, Sk.builtin.none.none$, Sk.builtin.none.none$];
+            $loc.random_integers = new Sk.builtin.func(js_random_integers);
+
+            $loc.rand = new Sk.builtin.func(function(self) {
+                // get *args
+                args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
+                if (args.v.length === 0) {
+                    return Sk.misceval.callsim(self.random_sample, self);
+                }
+
+                return Sk.misceval.callsim(self.random_sample, self, args);
+            });
+
+            // binomial: mtrand.pyx:L3587
+            var js_binomial = function(self, n, p, size) {
+                Sk.builtin.pyCheckArgs("binomial", arguments, 2, 3, true);
+                var on; // ndarray
+                var op; // ndarray
+                var ln; // long
+                var fp; // double
+
+                if (size == null) {
+                    size = Sk.builtin.none.none$;
+                }
+                debugger;
+                var ex = null;
+                try {
+                    fp = Sk.ffi.remapToJs(new Sk.builtin.float_(p));
+                    ln = Sk.ffi.remapToJs(new Sk.builtin.int_(n));
+                } catch(e) {
+                    ex = e;
+                }
+
+                // check if the conversion was successful
+                if (ex === null) {
+                    if (ln < 0) {
+                        throw new Sk.builtin.ValueError("n < 0");
+                    }
+                    if (fp < 0) {
+                        throw new Sk.builtin.ValueError("p < 0");
+                    } else if (fp > 1) {
+                        throw new Sk.builtin.ValueError("p > 1");
+                    } else if (isNaN(fp)) {
+                        throw new Sk.builtin.ValueError("p is nan");
+                    }
+                    return discnp_array_sc(self.internal_state, rk_binomial, size, ln, fp, self.lock);
+                }
+
+                // we may have to deal with arrays
+                on = PyArray_FROM_OTF(n, Sk.builtin.int_);
+                op = PyArray_FROM_OTF(p, Sk.builtin.float_);
+                var py_zero = new Sk.builtin.int_(0);
+                if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, n, py_zero)) == Sk.builtin.bool.true$) {
                     throw new Sk.builtin.ValueError("n < 0");
                 }
-                if (fp < 0) {
+                if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, p, py_zero)) == Sk.builtin.bool.true$) {
                     throw new Sk.builtin.ValueError("p < 0");
-                } else if (fp > 1) {
-                    throw new Sk.builtin.ValueError("p > 1");
-                } else if (isNaN(fp)) {
-                    throw new Sk.builtin.ValueError("p is nan");
                 }
-                return discnp_array_sc(self.internal_state, rk_binomial, size, ln, fp, self.lock);
-            }
+                if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.greater, p, new Sk.builtin.int_(1))) == Sk.builtin.bool.true$) {
+                    throw new Sk.builtin.ValueError("p > 1");
+                }
 
-            // we may have to deal with arrays
-            on = PyArray_FROM_OTF(n, Sk.builtin.int_);
-            op = PyArray_FROM_OTF(p, Sk.builtin.float_);
-            var py_zero = new Sk.builtin.int_(0);
-            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, n, py_zero)) == Sk.builtin.bool.true$) {
-                throw new Sk.builtin.ValueError("n < 0");
-            }
-            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.less, p, py_zero)) == Sk.builtin.bool.true$) {
-                throw new Sk.builtin.ValueError("p < 0");
-            }
-            if (Sk.misceval.callsim(np.$d.any, Sk.misceval.callsim(np.$d.greater, p, new Sk.builtin.int_(1))) == Sk.builtin.bool.true$) {
-                throw new Sk.builtin.ValueError("p > 1");
-            }
+                // ToDo: we need to broadcast the array
+                return discnp_array(self.internal_state, rk_binomial, size, on, op, self.lock);
+            };
+            $loc.binomial = new Sk.builtin.func(js_binomial);
 
-            // ToDo: we need to broadcast the array
-            return discnp_array(self.internal_state, rk_binomial, size, on, op, self.lock);
+            var js_bytes = function(self, length) {
+                throw new NotImplementedError('RandomState.bytes');
+            };
+            $loc.bytes = new Sk.builtin.func(js_bytes);
+
+            var js_choice = function(self, length) {
+                throw new NotImplementedError('RandomState.choice');
+            };
+            $loc.choice = new Sk.builtin.func(js_choice);
+
+            var js_uniform = function(self, length) {
+                throw new NotImplementedError('RandomState.uniform');
+            };
+            $loc.uniform = new Sk.builtin.func(js_uniform);
+
+            $loc.randn = new Sk.builtin.func(function(self) {
+                args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
+                if (args.v.length === 0) {
+                    return Sk.misceval.callsim(self.standard_normal, self);
+                }
+
+                return Sk.misceval.callsim(self.standard_normal, self, args);
+            });
+
+            $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
+
+            $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
         };
-        $loc.binomial = new Sk.builtin.func(js_binomial);
-
-        var js_bytes = function(self, length) {
-            throw new NotImplementedError('RandomState.bytes');
-        };
-        $loc.bytes = new Sk.builtin.func(js_bytes);
-
-        var js_choice = function(self, length) {
-            throw new NotImplementedError('RandomState.choice');
-        };
-        $loc.choice = new Sk.builtin.func(js_choice);
-
-        var js_uniform = function(self, length) {
-            throw new NotImplementedError('RandomState.uniform');
-        };
-        $loc.uniform = new Sk.builtin.func(js_uniform);
-
-        $loc.randn = new Sk.builtin.func(function(self) {
-            args = new Sk.builtins.tuple(Array.prototype.slice.call(arguments, 1));
-            if (args.v.length === 0) {
-                return Sk.misceval.callsim(self.standard_normal, self);
-            }
-
-            return Sk.misceval.callsim(self.standard_normal, self, args);
-        });
-
-        $loc.tp$getattr = Sk.builtin.object.prototype.GenericGetAttr;
-
-        $loc.tp$setattr = Sk.builtin.object.prototype.GenericSetAttr;
-    };
 
 
-    mod[CLASS_RANDOMSTATE] = Sk.misceval.buildClass(mod, randomState_c,
-      CLASS_RANDOMSTATE, []);
+        mod[CLASS_RANDOMSTATE] = Sk.misceval.buildClass(mod, randomState_c,
+        CLASS_RANDOMSTATE, []);
 
 
-    // _rand is just an instance of the RandomState class!
-    mod._rand = Sk.misceval.callsim(mod[CLASS_RANDOMSTATE]);
+        // _rand is just an instance of the RandomState class!
+        mod._rand = Sk.misceval.callsim(mod[CLASS_RANDOMSTATE]);
 
-    // map _rand.rand
-    mod.rand = Sk.abstr.gattr(mod._rand, 'rand', true);
-    mod.seed = Sk.abstr.gattr(mod._rand, 'seed', true);
-    mod.random_sample = Sk.abstr.gattr(mod._rand, 'random_sample', true);
-    mod.random = mod.random_sample;
-    mod.sample = mod.random_sample;
-    mod.binomial = Sk.abstr.gattr(mod._rand, 'binomial', true);
-    mod.randint = Sk.abstr.gattr(mod._rand, 'randint', true);
-    mod.random_integers = Sk.abstr.gattr(mod._rand, 'random_integers', true);
+        // map _rand.rand
+        mod.rand = Sk.abstr.gattr(mod._rand, 'rand', true);
+        mod.seed = Sk.abstr.gattr(mod._rand, 'seed', true);
+        mod.random_sample = Sk.abstr.gattr(mod._rand, 'random_sample', true);
+        mod.random = mod.random_sample;
+        mod.sample = mod.random_sample;
+        mod.binomial = Sk.abstr.gattr(mod._rand, 'binomial', true);
+        mod.randint = Sk.abstr.gattr(mod._rand, 'randint', true);
+        mod.random_integers = Sk.abstr.gattr(mod._rand, 'random_integers', true);
 
 
-    return mod;
+        return mod;
+    });
 };
