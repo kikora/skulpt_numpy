@@ -11,7 +11,7 @@ var dest = ['dist/numpy/', 'numpy/random/']
 // run all watch tasks :)
 gulp.task('default', ['clean', 'minify']);
 
-gulp.task('minify', function () {
+gulp.task('minify', ['clean'], function () {
     files.forEach(function(f) {
         gulp.src(f, {base: './'})
             .pipe(uglify({mangle: false}))
